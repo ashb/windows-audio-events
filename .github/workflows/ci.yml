@@ -32,8 +32,31 @@ jobs:
             wheels-to-artifacts: true
     runs-on: windows-latest
     steps:
-    - name: Test for windows server core
+    - name: Test for audio devices
       run: |
+        echo "NUM_AUDIO_DEVICES=$((Get-CimInstance win32_sounddevice).Length)" >> $Env:GITHUB_ENV
+    - name: Download VAC
+      if: env.NUM_AUDIO_DEVICES == 0
+      run: |
+        Set-PSDebug -Trace 1
+        $tmp = New-TemporaryFile
+        Invoke-WebRequest -OutFile $tmp -Uri https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip
+        Expand-Archive $tmp
+
+        cd $tmp.BaseName
+
+        $signature = Get-AuthenticodeSignature vbaudio_cable64_2003.cat
+        $store = Get-Item -Path Cert:\LocalMachine\TrustedPublisher
+        $store.Open("ReadWrite")
+        $store.Add($signature.SignerCertificate)
+
+        dir
+        Start-Process  .\VBCABLE_Setup_x64.exe -Wait -ArgumentList "-i", "-h"
+
+        cd ..
+        $tmp.BaseName | Remove-Item -Force -Recurse
+
+        Get-CimInstance win32_sounddevice
         echo "NUM_AUDIO_DEVICES=$((Get-CimInstance win32_sounddevice).Length)" >> $Env:GITHUB_ENV
     - uses: actions/checkout@v3
     - id: setup
